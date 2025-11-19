@@ -6,24 +6,25 @@
     {
       "id": "m1",
       "name": "Keris Merah",
-      "file": "kolektorA/models/keris1.glb",
+      "file": "models/keris1.glb",
       "info": "Keris merah, simbol keberanian.",
       "isFeatured": false
     },
     {
       "id": "m2",
       "name": "Keris Silver",
-      "file": "kolektorA/models/keris2.glb",
+      "file": "models/keris2.glb",
       "info": "Keris silver, kebijaksanaan.",
       "isFeatured": false
     },
     {
       "id": "m3",
       "name": "Keris Hitam",
-      "file": "kolektorA/models/keris3.glb",
+      "file": "models/keris3.glb",
       "info": "Keris hitam, misteri.",
       "isFeatured": true
     }
   ],
   "featuredMarkerName": "featured" 
 }
+
