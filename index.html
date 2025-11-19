@@ -3,293 +3,181 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WebAR Keris - Multi Collector</title>
-
-  <!-- A-Frame & MindAR -->
+  <title>WebAR Keris Skripsi</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
   <style>
-    body { margin:0; overflow:hidden; font-family: sans-serif; }
-    .ui-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1000; display:flex; gap:10px; flex-wrap:wrap; }
-    .btn { background: rgba(255,255,255,0.9); border:2px solid #8B0000; border-radius:20px; padding:10px 14px; font-weight:bold; cursor:pointer; }
-    .btn.active { background:#8B0000; color:#fff; }
-    .info-btn { position:absolute; top:80%; left:50%; transform:translateX(-50%); z-index:1000; display:none; background:#8B0000; color:#fff; padding:10px 20px; border-radius:20px; cursor:pointer; }
-    .info-panel { position:absolute; top:60%; left:50%; transform:translateX(-50%); background:rgba(255,255,255,0.95); padding:18px; border-radius:12px; width:86%; max-width:360px; box-shadow:0 6px 18px rgba(0,0,0,0.2); z-index:2000; display:none; }
-    .info-title { font-weight:bold; color:#8B0000; margin-bottom:8px; }
-    .hidden { display:none !important; }
-    .msg { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:1000; background:rgba(0,0,0,0.6); color:#fff; padding:8px 12px; border-radius:10px; font-size:14px; }
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    .ui-container { 
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
+      z-index: 1000; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 90%; 
+    }
+    .btn { 
+      background: rgba(255, 255, 255, 0.9); border: 2px solid #8B0000; 
+      border-radius: 20px; padding: 8px 16px; font-weight: bold; cursor: pointer; 
+    }
+    .btn.active { background: #8B0000; color: #fff; }
+    .msg-box { 
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+      z-index: 2000; background: rgba(0,0,0,0.8); color: #fff; padding: 20px; border-radius: 10px; text-align: center;
+    }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
 
-  <div id="message" class="msg hidden">Loading...</div>
-
-  <!-- Dynamic UI container (buttons for many models) -->
+  <div id="msg-box" class="msg-box">Memuat data...</div>
   <div id="ui-container" class="ui-container" style="display:none"></div>
 
-  <button id="info-btn" class="info-btn">Info</button>
-
-  <div id="info-panel" class="info-panel">
-    <div class="info-title" id="info-title"></div>
-    <div class="info-text" id="info-text"></div>
-    <div style="margin-top:12px; text-align:center;">
-      <button id="close-info" class="btn">Tutup</button>
-    </div>
-  </div>
-
-  <!-- A-Frame / MindAR scene -->
-  <a-scene id="ar-scene" mindar-image="imageTargetSrc: ./dummy.mind;" embedded
-           color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights"
+  <a-scene id="ar-scene" mindar-image="" embedded color-space="sRGB" 
+           renderer="colorManagement: true, physicallyCorrectLights" 
            vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
-    <a-entity camera></a-entity>
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    
+    <a-entity id="dynamic-targets"></a-entity>
   </a-scene>
 
 <script>
 (async function(){
+  const msgBox = document.getElementById('msg-box');
+  const uiContainer = document.getElementById('ui-container');
+  const arScene = document.getElementById('ar-scene');
+  const dynamicTargetsRoot = document.getElementById('dynamic-targets');
 
-  // util: read URL param
+  // 1. PATH LOGIC (Untuk GitHub Pages & Local)
   function getParam(name) {
-    const url = new URL(location.href);
+    const url = new URL(window.location.href);
     return url.searchParams.get(name);
   }
-
-  const owner = getParam('owner');
-  const messageEl = document.getElementById('message');
-  function showMessage(txt){ messageEl.textContent = txt; messageEl.classList.remove('hidden'); }
-  function hideMessage(){ messageEl.classList.add('hidden'); }
-
+  const owner = getParam('owner'); 
   if (!owner) {
-    showMessage('Owner tidak ditemukan. Gunakan parameter ?owner=kolektorA');
+    msgBox.innerText = "Error: Tambahkan ?owner=namafolder di URL";
     return;
   }
 
-  // Paths inside collector folder
-  const basePath = `${location.origin}${location.pathname}${owner}/`;
-  const metadataPath = `${basePath}metadata.json`;
-  const targetsJsonPath = `${basePath}targets.json`;
-  const targetsMindPath = `${basePath}targets.mind`; // will be set to mindar attr
+  // Membersihkan path dari index.html
+  let path = window.location.pathname;
+  path = path.substring(0, path.lastIndexOf('/') + 1);
+  const basePath = `${window.location.origin}${path}${owner}/`;
+  
+  console.log("Base Path:", basePath);
 
-  showMessage('Memuat metadata kolektor...');
-
-  // fetch metadata
-  let metadata;
+  // 2. LOAD JSON USER
+  let metadata, targetsMeta;
   try {
-    metadata = await fetch(metadataPath).then(r => { if(!r.ok) throw new Error('No metadata'); return r.json(); });
-  } catch (e) {
-    showMessage('Gagal memuat metadata kolektor: ' + metadataPath);
-    console.error(e);
+    // Load Metadata
+    metadata = await fetch(`${basePath}metadata.json`).then(r => r.json());
+    // Load Targets Info
+    targetsMeta = await fetch(`${basePath}targets.json`).then(r => r.json());
+  } catch (err) {
+    msgBox.innerText = "Gagal memuat JSON. Cek nama folder/file.";
     return;
   }
 
-  // fetch targets.json to map name->index
-  let targetsMeta;
-  try {
-    targetsMeta = await fetch(targetsJsonPath).then(r => { if(!r.ok) throw new Error('No targets.json'); return r.json(); });
-  } catch (e) {
-    showMessage('Gagal memuat targets.json. Pastikan kamu sudah generate targets.mind dan targets.json untuk kolektor ini.');
-    console.error(e);
-    return;
+  // 3. SETUP MINDAR
+  // Load file .mind sesuai nama di metadata
+  const mindFile = metadata.markerLibrary || 'targets.mind';
+  arScene.setAttribute('mindar-image', `imageTargetSrc: ${basePath}${mindFile}; autoStart: true; uiLoading: no; uiScanning: no;`);
+  msgBox.classList.add('hidden');
+
+  // 4. INTELLIGENT TARGET MAPPING
+  // Mencari index mana yang 'featured', mana yang 'card'
+  
+  const targetList = targetsMeta.targets; // Array dari targets.json
+  const featuredName = metadata.featuredMarkerName || 'featured';
+  
+  // Cari index angka (0, 1, 2...) berdasarkan nama di targets.json
+  let featuredIndex = targetList.findIndex(t => t.name === featuredName);
+  let cardIndex = 0; // Default kartu di index 0 (kolektorA_card)
+
+  console.log(`Mapping: Kartu Index ${cardIndex}, Featured Index ${featuredIndex}`);
+
+  // 5. BUILD SCENE ENTITIES
+  
+  // A. Entity Kartu (Index 0)
+  const entityCard = document.createElement('a-entity');
+  entityCard.setAttribute('mindar-image-target', `targetIndex: ${cardIndex}`);
+  
+  const modelContainer = document.createElement('a-entity'); // Tempat model muncul
+  entityCard.appendChild(modelContainer);
+  dynamicTargetsRoot.appendChild(entityCard);
+
+  // B. Entity Featured (Index sesuai JSON kamu, misal 2)
+  const entityFeatured = document.createElement('a-entity');
+  if (featuredIndex !== -1) {
+    entityFeatured.setAttribute('mindar-image-target', `targetIndex: ${featuredIndex}`);
+    dynamicTargetsRoot.appendChild(entityFeatured);
   }
 
-  hideMessage();
-
-  // set mindar imageTargetSrc to collector's .mind
-  const arScene = document.getElementById('ar-scene');
-  arScene.setAttribute('mindar-image', `imageTargetSrc: ${targetsMindPath}; autoStart: true;`); // autoStart supaya langsung jalan
-
-  // targetsMeta.targets expected array
-  const targets = (targetsMeta.targets || []).map(t => ({ name: t.name || '', ...t }));
-
-  // map name -> index
-  const nameToIndex = {};
-  targets.forEach((t, i) => { nameToIndex[t.name] = i; });
-
-  // prepare marker state tracking
-  const markerStates = {};
-
-  // Create dynamic target entities for each target in targets.json
-  function createTargetsDynamically() {
-    const scene = document.querySelector('a-scene');
-
-    targets.forEach((t, index) => {
-      markerStates[index] = false;
-
-      const ent = document.createElement('a-entity');
-      ent.setAttribute('mindar-image-target', `targetIndex: ${index}`);
-      ent.setAttribute('id', `marker-${index}`);
-      // we will append model entity inside or leave empty for detecting combined markers
-
-      // model container: will be used to show selected model for detected collector marker
-      const modelContainer = document.createElement('a-entity');
-      modelContainer.setAttribute('id', `model-container-${index}`);
-      modelContainer.setAttribute('visible', 'false');
-      ent.appendChild(modelContainer);
-
-      ent.addEventListener('targetFound', () => {
-        markerStates[index] = true;
-        onMarkerChange();
-      });
-      ent.addEventListener('targetLost', () => {
-        markerStates[index] = false;
-        onMarkerChange();
-      });
-
-      scene.appendChild(ent);
-    });
-  }
-
-  createTargetsDynamically();
-
-  // Build UI buttons based on metadata.models
-  const uiContainer = document.getElementById('ui-container');
-  const infoBtn = document.getElementById('info-btn');
-  const infoPanel = document.getElementById('info-panel');
-  const infoTitle = document.getElementById('info-title');
-  const infoText = document.getElementById('info-text');
-  const closeInfo = document.getElementById('close-info');
-
-  // create list of models
+  // 6. LOGIC GABUNGAN (The Thesis Logic)
   const models = metadata.models || [];
-  if (models.length === 0) {
-    showMessage('Tidak ada model yang didefinisikan dalam metadata.json');
+  let currentSelectedId = models[0]?.id;
+  let isCardVisible = false;
+  let isFeaturedVisible = false;
+
+  function updateView() {
+    // Hapus model lama
+    while (modelContainer.firstChild) modelContainer.removeChild(modelContainer.firstChild);
+
+    if (!isCardVisible) {
+      uiContainer.style.display = 'none';
+      return;
+    }
+    
+    uiContainer.style.display = 'flex';
+
+    // Tentukan Model mana yang muncul
+    let modelData;
+
+    // Jika Marker Featured kelihatan -> Cari model yang isFeatured: true
+    if (isFeaturedVisible) {
+       modelData = models.find(m => m.isFeatured === true);
+       console.log("Mode: Featured Triggered!");
+    } 
+    // Jika tidak -> Cari model yang dipilih user lewat tombol
+    else {
+       modelData = models.find(m => m.id === currentSelectedId);
+    }
+
+    if (!modelData) modelData = models[0]; // Fallback
+
+    // Render Model
+    const gltf = document.createElement('a-gltf-model');
+    gltf.setAttribute('src', `${basePath}${modelData.file}`); // Path sudah benar karena folder dihapus di JSON
+    gltf.setAttribute('scale', '0.5 0.5 0.5'); // Sesuaikan skala
+    gltf.setAttribute('position', '0 0 0');
+    gltf.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 8000; easing: linear');
+    
+    modelContainer.appendChild(gltf);
   }
 
-  // Render buttons
+  // Event Listeners
+  entityCard.addEventListener('targetFound', () => { isCardVisible = true; updateView(); });
+  entityCard.addEventListener('targetLost', () => { isCardVisible = false; updateView(); });
+
+  if (featuredIndex !== -1) {
+    entityFeatured.addEventListener('targetFound', () => { isFeaturedVisible = true; updateView(); });
+    entityFeatured.addEventListener('targetLost', () => { isFeaturedVisible = false; updateView(); });
+  }
+
+  // 7. BUILD BUTTONS
   uiContainer.innerHTML = '';
   models.forEach(m => {
     const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = m.name;
-    btn.setAttribute('data-model-id', m.id);
-    btn.addEventListener('click', () => selectModel(m.id));
+    btn.className = `btn ${m.id === currentSelectedId ? 'active' : ''}`;
+    btn.innerText = m.name;
+    btn.onclick = () => {
+        currentSelectedId = m.id;
+        // Refresh tombol active
+        Array.from(uiContainer.children).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        if(isCardVisible && !isFeaturedVisible) updateView();
+    };
     uiContainer.appendChild(btn);
   });
-
-  // Helpers to get featured model (first with isFeatured true)
-  const featuredModel = models.find(m => m.isFeatured) || null;
-
-  // Current selected model id
-  let currentModelId = models.length ? models[0].id : null;
-
-  // show/hide UI based on marker detection
-  function onMarkerFoundUI() {
-    uiContainer.style.display = 'flex';
-    if (currentModelId) infoBtn.style.display = 'block';
-  }
-  function onMarkerLostUI() {
-    uiContainer.style.display = 'none';
-    infoBtn.style.display = 'none';
-    infoPanel.style.display = 'none';
-  }
-
-  // select model via UI
-  function selectModel(modelId) {
-    currentModelId = modelId;
-    // mark active button
-    document.querySelectorAll('#ui-container .btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-model-id') === modelId));
-    // update visible model on collector marker (if marker currently visible)
-    updateVisibleModels();
-  }
-
-  // initialize first active button
-  if (currentModelId) {
-    const firstBtn = document.querySelector(`#ui-container .btn[data-model-id="${currentModelId}"]`);
-    if (firstBtn) firstBtn.classList.add('active');
-  }
-
-  infoBtn.addEventListener('click', () => {
-    if (!currentModelId) return;
-    const m = models.find(x => x.id === currentModelId);
-    if (!m) return;
-    infoTitle.innerText = m.name;
-    infoText.innerText = m.info || '';
-    infoPanel.style.display = 'block';
-  });
-  closeInfo.addEventListener('click', () => infoPanel.style.display = 'none');
-
-  // Update visible models based on marker states and selected model
-  function updateVisibleModels() {
-    // find any visible collector marker (that maps to this collector folder)
-    // We consider any target whose name exists in nameToIndex and not equal to featuredMarkerName as potential collector marker.
-    const visibleIndices = Object.keys(markerStates).filter(i => markerStates[i]).map(x=>parseInt(x));
-    if (visibleIndices.length === 0) {
-      // hide all model containers
-      targets.forEach((t, i) => {
-        const mc = document.getElementById(`model-container-${i}`);
-        if (mc) mc.setAttribute('visible','false');
-      });
-      onMarkerLostUI();
-      return;
-    }
-
-    onMarkerFoundUI();
-
-    // determine if featured marker is visible
-    const featuredMarkerName = metadata.featuredMarkerName || 'featured';
-    const featuredIndex = nameToIndex[featuredMarkerName];
-    const isFeaturedVisible = typeof featuredIndex !== 'undefined' && visibleIndices.includes(featuredIndex);
-
-    // find first visible "collector" marker (we interpret any target except featured as collector marker)
-    const collectorIndex = visibleIndices.find(i => {
-      const nm = targets[i] ? targets[i].name : '';
-      return nm && nm !== featuredMarkerName;
-    });
-
-    if (typeof collectorIndex === 'undefined') {
-      // if only featured visible -> do nothing or show nothing
-      return;
-    }
-
-    // the model container attached to collectorIndex will show models
-    const mc = document.getElementById(`model-container-${collectorIndex}`);
-    if (!mc) return;
-
-    // clear previous children
-    while (mc.firstChild) mc.removeChild(mc.firstChild);
-
-    // decide which model to show: if featured marker visible -> show featuredModel, else show currentModelId
-    let modelToShow = null;
-    if (isFeaturedVisible && featuredModel) {
-      modelToShow = featuredModel;
-    } else {
-      modelToShow = models.find(m => m.id === currentModelId) || models[0];
-    }
-
-    // create gltf-model entity
-    const modelUrl = (modelToShow.file || '').startsWith('http') ? modelToShow.file : (basePath + (modelToShow.file || ''));
-    const g = document.createElement('a-gltf-model');
-    g.setAttribute('src', modelUrl);
-    g.setAttribute('rotation', '0 0 -90');
-    g.setAttribute('position','0 0 0.1');
-    g.setAttribute('scale','0.1 0.1 0.1');
-    g.setAttribute('visible','true');
-    mc.appendChild(g);
-
-    // hide other model containers
-    targets.forEach((t, i) => {
-      if (i !== collectorIndex) {
-        const other = document.getElementById(`model-container-${i}`);
-        if (other) other.setAttribute('visible','false');
-      }
-    });
-
-    mc.setAttribute('visible','true');
-  }
-
-  // Called when any marker found/lost
-  function onMarkerChange() {
-    updateVisibleModels();
-  }
-
-  // Expose for debugging in console
-  window._AR_APP = { metadata, targets, nameToIndex, markerStates, selectModel };
-
-  // initial update (in case some markers already visible)
-  updateVisibleModels();
 
 })();
 </script>
 </body>
 </html>
-
