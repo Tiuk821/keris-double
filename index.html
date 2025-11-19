@@ -65,7 +65,7 @@
   }
 
   // Paths inside collector folder
-  const basePath = `./${owner}/`;
+  const basePath = `${location.origin}${location.pathname}${owner}/`;
   const metadataPath = `${basePath}metadata.json`;
   const targetsJsonPath = `${basePath}targets.json`;
   const targetsMindPath = `${basePath}targets.mind`; // will be set to mindar attr
@@ -292,3 +292,4 @@
 </script>
 </body>
 </html>
+
