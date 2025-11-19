@@ -1,6 +1,6 @@
 {
   "collectorName": "Pak Seno",
-  "markerLibrary": "targets.mind",
+  "markerLibrary": "kartu_baru.mind",
   "markerMeta": "targets.json",
   "models": [
     {
@@ -26,4 +26,5 @@
     }
   ],
   "featuredMarkerName": "featured" 
+
 }
