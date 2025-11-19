@@ -1,0 +1,8 @@
+{
+  "numTargets": 3,
+  "targets": [
+    { "name": "kolektorA_card" },
+    { "name": "kolektorA_extra" },
+    { "name": "featured" }
+  ]
+}
