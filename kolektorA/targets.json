@@ -1,0 +1,6 @@
+{
+  "numTargets": 1,
+  "targets": [
+    { "name": "kolektorA_card", "index": 0 }
+  ]
+}
