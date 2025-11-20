@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebAR Keris Skripsi</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    .ui-container { 
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
+      z-index: 1000; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 90%; 
+    }
+    .btn { 
+      background: rgba(255, 255, 255, 0.9); border: 2px solid #8B0000; 
+      border-radius: 20px; padding: 8px 16px; font-weight: bold; cursor: pointer; 
+    }
+    .btn.active { background: #8B0000; color: #fff; }
+    .msg-box { 
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+      z-index: 2000; background: rgba(0,0,0,0.8); color: #fff; padding: 20px; border-radius: 10px; text-align: center;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div id="msg-box" class="msg-box">Memuat data...</div>
+  <div id="ui-container" class="ui-container" style="display:none"></div>
+
+  <a-assets timeout="5000">
+    <a-asset-item id="keris1" src="models/keris1.glb"></a-asset-item>
+    <a-asset-item id="keris2" src="models/keris2.glb"></a-asset-item>
+    <a-asset-item id="keris3" src="models/keris3.glb"></a-asset-item>
+  </a-assets>
+
+
+  <a-scene id="ar-scene" mindar-image="" embedded color-space="sRGB" 
+           renderer="colorManagement: true, physicallyCorrectLights" 
+           vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    
+    <a-entity id="dynamic-targets"></a-entity>
+  </a-scene>
+
+<script>
+(async function(){
+  const msgBox = document.getElementById('msg-box');
+  const uiContainer = document.getElementById('ui-container');
+  const arScene = document.getElementById('ar-scene');
+  const dynamicTargetsRoot = document.getElementById('dynamic-targets');
+
+  // 1. PATH LOGIC (Untuk GitHub Pages & Local)
+  function getParam(name) {
+    const url = new URL(window.location.href);
+    return url.searchParams.get(name);
+  }
+  const owner = getParam('owner'); 
+  if (!owner) {
+    msgBox.innerText = "Error: Tambahkan ?owner=namafolder di URL";
+    return;
+  }
+
+  // Membersihkan path dari index.html
+  let path = window.location.pathname;
+  path = path.substring(0, path.lastIndexOf('/') + 1);
+  const basePath = `${window.location.origin}${path}${owner}/`;
+  
+  console.log("Base Path:", basePath);
+
+  // 2. LOAD JSON USER
+  let metadata, targetsMeta;
+  try {
+    // Load Metadata
+    metadata = await fetch(`${basePath}metadata.json`).then(r => r.json());
+    // Load Targets Info
+    targetsMeta = await fetch(`${basePath}targets.json`).then(r => r.json());
+  } catch (err) {
+    msgBox.innerText = "Gagal memuat JSON. Cek nama folder/file.";
+    return;
+  }
+
+  // 3. SETUP MINDAR
+  // Load file .mind sesuai nama di metadata
+  const mindFile = metadata.markerLibrary || 'targets.mind';
+  arScene.setAttribute('mindar-image', `imageTargetSrc: ${basePath}${mindFile}; autoStart: true; uiLoading: no; uiScanning: no;`);
+  msgBox.classList.add('hidden');
+
+  // 4. INTELLIGENT TARGET MAPPING
+  // Mencari index mana yang 'featured', mana yang 'card'
+  
+  const targetList = targetsMeta.targets; // Array dari targets.json
+  const featuredName = metadata.featuredMarkerName || 'featured';
+  
+  // Cari index angka (0, 1, 2...) berdasarkan nama di targets.json
+  let featuredIndex = targetList.findIndex(t => t.name === featuredName);
+  let cardIndex = 0; // Default kartu di index 0 (kolektorA_card)
+
+  console.log(`Mapping: Kartu Index ${cardIndex}, Featured Index ${featuredIndex}`);
+
+  // 5. BUILD SCENE ENTITIES
+  
+  // A. Entity Kartu (Index 0)
+  const entityCard = document.createElement('a-entity');
+  entityCard.setAttribute('mindar-image-target', `targetIndex: ${cardIndex}`);
+  
+  const modelContainer = document.createElement('a-entity'); // Tempat model muncul
+  entityCard.appendChild(modelContainer);
+  dynamicTargetsRoot.appendChild(entityCard);
+
+  // B. Entity Featured (Index sesuai JSON kamu, misal 2)
+  const entityFeatured = document.createElement('a-entity');
+  if (featuredIndex !== -1) {
+    entityFeatured.setAttribute('mindar-image-target', `targetIndex: ${featuredIndex}`);
+    dynamicTargetsRoot.appendChild(entityFeatured);
+  }
+
+  // 6. LOGIC GABUNGAN (The Thesis Logic)
+  const models = metadata.models || [];
+  let currentSelectedId = models[0]?.id;
+  let isCardVisible = false;
+  let isFeaturedVisible = false;
+
+  function updateView() {
+    // Hapus model lama
+    while (modelContainer.firstChild) modelContainer.removeChild(modelContainer.firstChild);
+
+    if (!isCardVisible) {
+      uiContainer.style.display = 'none';
+      return;
+    }
+    
+    uiContainer.style.display = 'flex';
+
+    // Tentukan Model mana yang muncul
+    let modelData;
+
+    // Jika Marker Featured kelihatan -> Cari model yang isFeatured: true
+    if (isFeaturedVisible) {
+       modelData = models.find(m => m.isFeatured === true);
+       console.log("Mode: Featured Triggered!");
+    } 
+    // Jika tidak -> Cari model yang dipilih user lewat tombol
+    else {
+       modelData = models.find(m => m.id === currentSelectedId);
+    }
+
+    if (!modelData) modelData = models[0]; // Fallback
+
+    // Render Model
+    const gltf = document.createElement('a-gltf-model');
+    gltf.setAttribute('src', `${basePath}${modelData.file}`); // Path sudah benar karena folder dihapus di JSON
+    gltf.setAttribute('scale', '0.5 0.5 0.5'); // Sesuaikan skala
+    gltf.setAttribute('position', '0 0 0');
+    gltf.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 8000; easing: linear');
+    
+    modelContainer.appendChild(gltf);
+  }
+
+  // Event Listeners
+  entityCard.addEventListener('targetFound', () => { isCardVisible = true; updateView(); });
+  entityCard.addEventListener('targetLost', () => { isCardVisible = false; updateView(); });
+
+  if (featuredIndex !== -1) {
+    entityFeatured.addEventListener('targetFound', () => { isFeaturedVisible = true; updateView(); });
+    entityFeatured.addEventListener('targetLost', () => { isFeaturedVisible = false; updateView(); });
+  }
+
+  // 7. BUILD BUTTONS
+  uiContainer.innerHTML = '';
+  models.forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = `btn ${m.id === currentSelectedId ? 'active' : ''}`;
+    btn.innerText = m.name;
+    btn.onclick = () => {
+        currentSelectedId = m.id;
+        // Refresh tombol active
+        Array.from(uiContainer.children).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        if(isCardVisible && !isFeaturedVisible) updateView();
+    };
+    uiContainer.appendChild(btn);
+  });
+
+})();
+</script>
+</body>
+</html>
